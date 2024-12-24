@@ -246,23 +246,25 @@ When you have all of these components, you can run the update statement. */
 ALTER TABLE product_units
 ADD current_quantity INT;
 
-WITH LatestInventory AS (
-    SELECT
-        vi.product_id,
-        COALESCE(vi.quantity, 0) AS latest_quantity
-    FROM vendor_inventory vi
-    WHERE (vi.product_id, vi.timestamp) IN (
-        SELECT product_id, MAX(timestamp)
-        FROM vendor_inventory
-        GROUP BY product_id
-    )
-)
 UPDATE product_units
 SET current_quantity = (
-    SELECT li.latest_quantity
-    FROM LatestInventory li
-    WHERE li.product_id = product_units.product_id
+    SELECT COALESCE(quantity, 0)
+    FROM (
+        SELECT 
+            product_id,
+            quantity,
+            ROW_NUMBER() OVER (PARTITION BY product_id ORDER BY snapshot_timestamp DESC) AS rn
+        FROM vendor_inventory
+    ) AS LastQuantity
+    WHERE LastQuantity.product_id = product_units.product_id
+    AND LastQuantity.rn = 1
+)
+WHERE product_id IN (
+    SELECT DISTINCT product_id
+    FROM vendor_inventory
 );
+
+select * from product_units;
 
 
 
